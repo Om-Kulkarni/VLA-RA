@@ -1,0 +1,23 @@
+name: Weekly Digest
+
+on:
+  schedule:
+    - cron: '0 8 * * 1' # Runs at 08:00 every Monday
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: Setup Python using uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - name: Run main script
+        run: uv run main.py
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}

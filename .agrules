@@ -1,0 +1,54 @@
+# VLA-RA: Vision-Language-Action Research Assistant - AI Coding Laws
+
+project_context:
+  name: VLA-RA
+  domain: Robotics Research & Multi-Agent Systems
+  stack: [LangGraph, Gemini 1.5 Pro, Supabase, Docling, uv]
+
+# 1. ARCHITECTURAL MANDATES (SOLID)
+# -----------------------------------------------------------------------------
+architecture_rules:
+  - principle: "S: Single Responsibility. Each Agent Node in agents/ must do exactly one thing (Scout, Analyst, etc.)."
+  - principle: "O: Open/Closed. Add new scoring criteria via core/scoring_logic.py without modifying Agent logic."
+  - principle: "L: Liskov Substitution. Ensure all Tool classes are interchangeable with BaseTool."
+  - principle: "I: Interface Segregation. Nodes should only receive the slice of GraphState they strictly require."
+  - principle: "D: Dependency Inversion. High-level Graph logic must not depend on low-level API implementations (ArXiv/HuggingFace)."
+
+# 2. ERROR HANDLING: "FAIL LOUDLY" POLICY
+# -----------------------------------------------------------------------------
+error_handling:
+  - general_rule: "Explicit is better than implicit. Let it crash if the state is corrupted."
+  - allowed_try_catch:
+      - "Optional metadata enrichment (e.g., fetching a lab's Twitter handle)."
+      - "Non-critical logging/telemetry."
+      - "Fetching favicons or non-essential external assets."
+  - forbidden_try_catch:
+      - "PDF Parsing (Docling): If parsing fails, the paper must be marked 'FAILED' in State, not caught and skipped."
+      - "Database Transactions: Any Supabase failure must halt the current branch immediately."
+      - "LLM Scoring: Do not provide a 'default score' if the LLM fails. Halt and log the error."
+  - specific_exception: "Define custom exceptions in core/exceptions.py (e.g., PaperAlreadyProcessedError, InsufficientDataForScore)."
+
+# 3. PACKAGE & RUNTIME MANAGEMENT (UV)
+# -----------------------------------------------------------------------------
+runtime_rules:
+  - tool: "uv"
+  - commands:
+      - "Always use 'uv add <package>' for new dependencies."
+      - "Always use 'uv run <command>' for execution (e.g., 'uv run main.py')."
+      - "Do not use 'pip' or 'venv' directly."
+  - environment: "The .python-version file must be respected. Use 'uv sync' to align the environment."
+
+# 4. AI-DRIVEN CODING BEST PRACTICES
+# -----------------------------------------------------------------------------
+ai_interaction_rules:
+  - logic_validation: "If a suggested logic contradicts factual robotics benchmarks or math, correct me immediately."
+  - no_flattery: "Do not apologize or use filler language. Provide the most efficient, outcome-oriented code."
+  - context_hygiene: "Before implementing a feature, check the existing 'Project Structure' to prevent duplicate utility functions."
+  - documentation: "Every Agent Node must have a docstring explaining its 'Input State' and 'Output State' transitions."
+  - tracing: "All LangGraph nodes must include metadata for LangSmith tracing to ensure 'Chain of Thought' visibility."
+
+# 5. ROBOTICS-SPECIFIC HEURISTICS
+# -----------------------------------------------------------------------------
+domain_rules:
+  - scoring: "Weighted Rubric calculations must be deterministic. LLMs generate the raw inputs; core/scoring_logic.py performs the math."
+  - multimodal: "When coding Analyst.py, ensure Gemini 1.5 Pro is explicitly passed image URI references for architecture diagrams."

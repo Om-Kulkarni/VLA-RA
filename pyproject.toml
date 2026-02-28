@@ -1,0 +1,11 @@
+[project]
+name = "vla-ra"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "docling>=2.75.0",
+    "langgraph>=1.0.10",
+    "supabase>=2.28.0",
+]
