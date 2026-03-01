@@ -3,13 +3,15 @@ ArXiv API Wrapper
 
 This module provides a search wrapper to interface with ArXiv and potentially OpenReview.
 """
+import arxiv
+from core.base_tool import BaseTool
 
-class ArxivTool:
+class ArxivTool(BaseTool):
     """
     A tool configured to search for and retrieve metadata from ArXiv.
     """
     
-    def search(self, query: str, max_results: int = 5) -> list:
+    def run(self, query: str, max_results: int = 5) -> list:
         """
         Executes a search query against the ArXiv API.
         
@@ -20,4 +22,21 @@ class ArxivTool:
         Returns:
             list: A list of dictionaries containing paper metadata (title, abstract, url, etc.).
         """
-        return []
+        client = arxiv.Client()
+        search_obj = arxiv.Search(
+            query=query,
+            max_results=max_results,
+            sort_by=arxiv.SortCriterion.Relevance
+        )
+        
+        results = []
+        for result in client.results(search_obj):
+            results.append({
+                "title": result.title,
+                "abstract": result.summary,
+                "url": result.pdf_url or result.entry_id,
+                "authors": [author.name for author in result.authors],
+                "published": result.published.isoformat() if result.published else None
+            })
+            
+        return results

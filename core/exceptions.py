@@ -23,3 +23,11 @@ class PDFParsingError(VLARAException):
 class LLMScoringError(VLARAException):
     """Raised when an LLM fails to process or generate a valid score."""
     pass
+
+class LLMGenerationError(VLARAException):
+    """Raised when an LLM fails to generate the required output (e.g. search queries)."""
+    pass
+
+class ExternalAPIError(VLARAException):
+    """Raised when an external API (like ArXiv or OpenReview) fails to return expected results."""
+    pass
