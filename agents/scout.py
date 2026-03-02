@@ -9,13 +9,14 @@ import logging
 from typing import Any, Dict
 from google import genai
 from google.genai import types
+from langchain_core.runnables import RunnableConfig
 
 from tools.arxiv_api import ArxivTool
 from core.exceptions import LLMGenerationError, ExternalAPIError
 
 logger = logging.getLogger(__name__)
 
-def scout_node(state: Dict[str, Any]) -> Dict[str, Any]:
+def scout_node(state: Dict[str, Any], config: RunnableConfig) -> Dict[str, Any]:
     """
     Executes the Scout logic to query external sources.
     

@@ -52,3 +52,15 @@ ai_interaction_rules:
 domain_rules:
   - scoring: "Weighted Rubric calculations must be deterministic. LLMs generate the raw inputs; core/scoring_logic.py performs the math."
   - multimodal: "When coding Analyst.py, ensure Gemini 1.5 Pro is explicitly passed image URI references for architecture diagrams."
+
+# 6. LOGGING & OBSERVABILITY
+# -----------------------------------------------------------------------------
+logging_rules:
+  - framework: "Use the standard Python `logging` module"
+  - levels:
+      - DEBUG: "Use for detailed tracing of GraphState transitions, LLM raw prompts/responses, and granular API payloads."
+      - INFO: "Use for tracking major Agent Node completions (e.g., 'Analyst Node finished processing paper X'), successful database inserts, and workflow milestones."
+      - WARNING: "Use for non-fatal issues like rate limits approaching, missing optional metadata, or skipped non-essential steps."
+      - ERROR: "Use for caught exceptions that halt a specific branch but don't crash the entire system (e.g., a single paper parsing failure)."
+      - CRITICAL: "Use for unrecoverable errors that must halt the entire workflow (e.g., Supabase connection failure, out of memory, complete API outage)."
+  - formatting: "Logs should be structured (preferably JSON in production) and include contextual metadata like `agent_name`, `paper_id`, and `trace_id`."

@@ -16,7 +16,14 @@ def main():
     # Load environment variables (e.g., GEMINI_API_KEY)
     load_dotenv()
     
-    print("Initializing LangGraph workflow...")
+    import logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger(__name__)
+    
+    logger.info("Initializing LangGraph workflow...")
     workflow_app = create_workflow()
     
     # Define a test initial state
@@ -31,26 +38,34 @@ def main():
     
     print(f"Triggering workflow with query: '{initial_state['search_query']}'\n")
     
-    # Execute the graph
-    try:
-        final_state = workflow_app.invoke(initial_state)
+    # Execute the graph and pass LangSmith metadata for tracing
+    config = {"configurable": {"thread_id": "test_workflow"}, "metadata": {"run_name": "VLA-RA-Testing"}}
+    final_state = workflow_app.invoke(initial_state, config=config)
+    
+    print("\n--- Workflow Execution Complete ---")
+    print("\nScout Results Discovered:")
+    
+    scout_results = final_state.get("scout_results", [])
+    if not scout_results:
+        print("No Scout results found.")
         
-        print("\n--- Workflow Execution Complete ---")
-        print("\nScout Results Discovered:")
+    for idx, result in enumerate(scout_results, start=1):
+        print(f"\nResult {idx}:")
+        print(f"  Title: {result.get('title')}")
+        print(f"  URL: {result.get('url')}")
+        print(f"  Authors: {', '.join(result.get('authors', []))}")
+        print(f"  Source Query: {result.get('source_query')}")
         
-        results = final_state.get("scout_results", [])
-        if not results:
-            print("No results found.")
-            
-        for idx, result in enumerate(results, start=1):
-            print(f"\nResult {idx}:")
-            print(f"  Title: {result.get('title')}")
-            print(f"  URL: {result.get('url')}")
-            print(f"  Authors: {', '.join(result.get('authors', []))}")
-            print(f"  Source Query: {result.get('source_query')}")
-            
-    except Exception as e:
-        print(f"\nWorkflow failed with error: {e}")
+    print("\n\nLibrarian Filtered Results:")
+    filtered_results = final_state.get("filtered_results", [])
+    if not filtered_results:
+        print("No papers passed the Librarian's filters.")
+        
+    for idx, result in enumerate(filtered_results, start=1):
+        print(f"\nFiltered Result {idx}:")
+        print(f"  Title: {result.get('title')}")
+        print(f"  ArXiv ID: {result.get('arxiv_id')}")
+        print(f"  URL: {result.get('url')}")
 
 if __name__ == "__main__":
     main()
