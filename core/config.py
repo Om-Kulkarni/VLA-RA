@@ -3,18 +3,30 @@ Configuration Options
 
 This module handles environment variables, API keys, and global configuration values.
 """
-import os
 
-def get_config() -> dict:
+import os
+from dataclasses import dataclass
+
+
+@dataclass
+class ProjectConfig:
     """
-    Retrieves global configuration values from environment variables.
-    
+    Holds global configuration options for the VLA-RA project.
+    """
+
+    llm_model: str = "gemini-3.1-flash-lite-preview"
+    max_papers_per_run: int = 5
+
+
+def get_config() -> ProjectConfig:
+    """
+    Retrieves global configuration values from environment variables and defaults.
+
     Returns:
-        dict: A dictionary of configuration keys and limits.
+        ProjectConfig: A dataclass instance containing configuration parameters.
     """
-    return {
-        "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
-        "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY"),
-        "SUPABASE_URL": os.getenv("SUPABASE_URL"),
-        "SUPABASE_KEY": os.getenv("SUPABASE_KEY"),
-    }
+    return ProjectConfig(
+        # Use env var if present; otherwise default set in dataclass
+        llm_model=os.getenv("LLM_MODEL", "gemini-3.1-flash-lite-preview"),
+        max_papers_per_run=int(os.getenv("MAX_PAPERS_PER_RUN", 5)),
+    )

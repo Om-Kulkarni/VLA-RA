@@ -3082,7 +3082,9 @@ dependencies = [
     { name = "docling" },
     { name = "google-genai" },
     { name = "langgraph" },
+    { name = "langgraph-checkpoint" },
     { name = "python-dotenv" },
+    { name = "requests" },
     { name = "supabase" },
 ]
 
@@ -3092,7 +3094,9 @@ requires-dist = [
     { name = "docling", specifier = ">=2.75.0" },
     { name = "google-genai", specifier = ">=1.65.0" },
     { name = "langgraph", specifier = ">=1.0.10" },
+    { name = "langgraph-checkpoint", specifier = ">=4.0.1" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
+    { name = "requests", specifier = ">=2.32.5" },
     { name = "supabase", specifier = ">=2.28.0" },
 ]
 

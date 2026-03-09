@@ -44,6 +44,7 @@ ai_interaction_rules:
   - logic_validation: "If a suggested logic contradicts factual robotics benchmarks or math, correct me immediately."
   - no_flattery: "Do not apologize or use filler language. Provide the most efficient, outcome-oriented code."
   - context_hygiene: "Before implementing a feature, check the existing 'Project Structure' to prevent duplicate utility functions."
+  - pre_coding_information_gathering: "ALWAYS ask for all relevant information (e.g., config parameters, API schemas, target model architectures, database schemas, etc.) and ensure complete understanding of requirements BEFORE writing any code."
   - documentation: "Every Agent Node must have a docstring explaining its 'Input State' and 'Output State' transitions."
   - tracing: "All LangGraph nodes must include metadata for LangSmith tracing to ensure 'Chain of Thought' visibility."
 
@@ -64,3 +65,8 @@ logging_rules:
       - ERROR: "Use for caught exceptions that halt a specific branch but don't crash the entire system (e.g., a single paper parsing failure)."
       - CRITICAL: "Use for unrecoverable errors that must halt the entire workflow (e.g., Supabase connection failure, out of memory, complete API outage)."
   - formatting: "Logs should be structured (preferably JSON in production) and include contextual metadata like `agent_name`, `paper_id`, and `trace_id`."
+
+# 7. STATE AND PERSISTENCE RULES
+# -----------------------------------------------------------------------------
+state_persistence_rules:
+  - stateless_agents: "Agent Nodes must be stateless. Any persistence to Supabase must include a 'status' flag to allow for crash recovery in subsequent runs."

@@ -41,7 +41,7 @@ def test_critic_node_execution(
     # LLM Setup
     mock_llm_instance = mock_genai_client.return_value
     mock_llm_response = MagicMock()
-    mock_llm_response.text = "4.5"
+    mock_llm_response.text = '{"relevance_score": 4.5, "has_code_links": true, "has_project_website": false, "is_continuation": false}'
     mock_llm_instance.models.generate_content.return_value = mock_llm_response
 
     input_state = {
