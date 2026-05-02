@@ -1,68 +1,127 @@
 """
 Database Management Interface
 
-This module interacts with the Supabase/Postgres backend for reading and writing processed data.
+This module manages a local SQLite database for reading and writing processed paper data.
 Any database failure must trigger an explicit crash/halt, not caught silently.
 """
 
-from supabase import create_client, Client, ClientOptions
 import os
+import json
+import sqlite3
+import logging
+
+logger = logging.getLogger(__name__)
+
+_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS research_papers (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    arxiv_id        TEXT    NOT NULL UNIQUE,
+    title           TEXT,
+    summary         TEXT,
+    pdf_url         TEXT,
+    status          TEXT    DEFAULT 'pending_review',
+    priority_score  REAL,
+    github_link     TEXT,
+    project_website TEXT,
+    metadata        TEXT    -- JSON-serialised dict of rubric criteria
+);
+"""
 
 
 class DatabaseClient:
     """
-    Client wrapper for interacting with Supabase securely.
+    Client wrapper for interacting with the local SQLite database.
+    The database file is created automatically if it does not exist.
     """
 
-    def __init__(self, url: str, key: str):
+    def __init__(self, db_path: str = "data/vla_ra.db"):
         """
-        Initializes the Supabase client connection.
+        Initialises the SQLite connection and ensures the schema exists.
 
         Args:
-            url (str): The Supabase project URL.
-            key (str): The Supabase API/Service key.
+            db_path (str): Path to the SQLite database file.
+                           Parent directories are created automatically.
         """
-        # Validates that url and key are provided (Fail loudly)
-        if not url or not key:
-            raise ValueError("Supabase URL and Key must be provided.")
+        if not db_path:
+            raise ValueError("db_path must be a non-empty string.")
 
-        # Adding a 10s timeout enforces Fail Loudly if DB host is unreachable
-        options = ClientOptions(postgrest_client_timeout=10)
-        self.supabase: Client = create_client(url, key, options=options)
+        os.makedirs(os.path.dirname(db_path) if os.path.dirname(db_path) else ".", exist_ok=True)
+        # check_same_thread=False is safe here because LangGraph runs nodes sequentially
+        self._conn = sqlite3.connect(db_path, check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row  # enables dict-like row access
+        self._conn.execute("PRAGMA journal_mode=WAL;")  # better crash safety
+        self._init_schema()
+        logger.info(f"DatabaseClient initialised. DB path: {db_path}")
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _init_schema(self):
+        """Creates tables if they do not already exist."""
+        self._conn.executescript(_SCHEMA_SQL)
+        self._conn.commit()
+
+    def _row_to_dict(self, row: sqlite3.Row) -> dict:
+        """Converts a sqlite3.Row to a plain dict, deserialising JSON metadata."""
+        d = dict(row)
+        if d.get("metadata") and isinstance(d["metadata"], str):
+            try:
+                d["metadata"] = json.loads(d["metadata"])
+            except json.JSONDecodeError:
+                pass
+        return d
+
+    # ------------------------------------------------------------------
+    # Public API (mirrors the original Supabase interface)
+    # ------------------------------------------------------------------
 
     def check_exists(self, external_id: str) -> bool:
         """
-        Checks if a paper already exists in the Postgres database.
+        Checks if a paper already exists in the database.
 
         Args:
-            external_id (str): The unique identifier (e.g., ArXiv ID) to check.
+            external_id (str): The unique ArXiv ID to check.
 
         Returns:
             bool: True if it exists, False otherwise.
         """
-        # If this fails, it natively raises an exception (e.g., mapped by Supabase Python client),
-        # fulfilling the "fail loudly" policy.
-        response = (
-            self.supabase.table("research_papers")
-            .select("id")
-            .eq("arxiv_id", external_id)
-            .execute()
+        cursor = self._conn.execute(
+            "SELECT id FROM research_papers WHERE arxiv_id = ?", (external_id,)
         )
-        return len(response.data) > 0
+        return cursor.fetchone() is not None
 
     def insert_record(self, data: dict):
         """
-        Inserts a new processed record into the database. Fails loudly on error.
+        Inserts a new paper record into the database. Fails loudly on error.
 
         Args:
-            data (dict): The final scored payload to insert.
+            data (dict): The paper payload. Expected keys: arxiv_id, title,
+                         summary, pdf_url, status.
         """
-        # Fails loudly on any Supabase error during insertion
-        self.supabase.table("research_papers").insert(data).execute()
+        metadata = data.get("metadata")
+        if isinstance(metadata, dict):
+            metadata = json.dumps(metadata)
+
+        self._conn.execute(
+            """
+            INSERT INTO research_papers (arxiv_id, title, summary, pdf_url, status, metadata)
+            VALUES (:arxiv_id, :title, :summary, :pdf_url, :status, :metadata)
+            """,
+            {
+                "arxiv_id": data.get("arxiv_id"),
+                "title": data.get("title"),
+                "summary": data.get("summary"),
+                "pdf_url": data.get("pdf_url"),
+                "status": data.get("status", "pending_review"),
+                "metadata": metadata,
+            },
+        )
+        self._conn.commit()
 
     def get_papers_by_status(self, status: str) -> list[dict]:
         """
-        Fetches all papers from the database that match the given status.
+        Fetches all papers that match the given status.
 
         Args:
             status (str): The status to filter by (e.g., 'pending_review').
@@ -70,13 +129,10 @@ class DatabaseClient:
         Returns:
             list[dict]: A list of paper records matching the status.
         """
-        response = (
-            self.supabase.table("research_papers")
-            .select("*")
-            .eq("status", status)
-            .execute()
+        cursor = self._conn.execute(
+            "SELECT * FROM research_papers WHERE status = ?", (status,)
         )
-        return response.data
+        return [self._row_to_dict(row) for row in cursor.fetchall()]
 
     def update_status(self, external_id: str, new_status: str):
         """
@@ -84,11 +140,13 @@ class DatabaseClient:
 
         Args:
             external_id (str): The ArXiv ID.
-            new_status (str): The new status to set ('pending_review', 'scored', 'rejected').
+            new_status (str): The new status ('pending_review', 'scored', 'rejected').
         """
-        self.supabase.table("research_papers").update({"status": new_status}).eq(
-            "arxiv_id", external_id
-        ).execute()
+        self._conn.execute(
+            "UPDATE research_papers SET status = ? WHERE arxiv_id = ?",
+            (new_status, external_id),
+        )
+        self._conn.commit()
 
     def update_paper_score(self, external_id: str, score: float, metadata: dict):
         """
@@ -99,15 +157,29 @@ class DatabaseClient:
             score (float): The final priority score.
             metadata (dict): The dict of extracted heuristic values.
         """
-        update_data = {"score": score, "status": "scored", "metadata": metadata}
+        update_fields = {
+            "priority_score": score,
+            "status": "scored",
+            "metadata": json.dumps(metadata),
+            "github_link": metadata.get("github_link"),
+            "project_website": metadata.get("project_website"),
+            "arxiv_id": external_id,
+        }
 
-        # Check if the extracted data explicitly includes links
-        if "github_link" in metadata:
-            update_data["github_link"] = metadata.get("github_link")
+        self._conn.execute(
+            """
+            UPDATE research_papers
+            SET priority_score  = :priority_score,
+                status          = :status,
+                metadata        = :metadata,
+                github_link     = :github_link,
+                project_website = :project_website
+            WHERE arxiv_id = :arxiv_id
+            """,
+            update_fields,
+        )
+        self._conn.commit()
 
-        if "project_website" in metadata:
-            update_data["project_website"] = metadata.get("project_website")
-
-        self.supabase.table("research_papers").update(update_data).eq(
-            "arxiv_id", external_id
-        ).execute()
+    def close(self):
+        """Closes the database connection explicitly."""
+        self._conn.close()

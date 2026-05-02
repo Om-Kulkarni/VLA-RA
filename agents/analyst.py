@@ -1,16 +1,19 @@
 """
 Analyst Node
 
-This module serves as the multimodal reader, utilizing Gemini 1.5 Pro and Docling
-to parse and analyze PDFs and extract architecture details.
+This module serves as the multimodal reader, utilising DeepSeek V3 via OpenRouter
+and Docling to parse and analyse PDFs and extract architecture details.
 """
 
-from typing import Any, Dict
 import os
 import re
-import requests
+import json
 import logging
-from google import genai
+import requests
+from typing import Any, Dict
+
+from openai import OpenAI
+
 from core.config import get_config
 from tools.parser import PDFParserTool
 from tools.code_interpreter import CodeInterpreterTool
@@ -21,7 +24,7 @@ logger = logging.getLogger(__name__)
 def analyst_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     Parses full paper texts/images and extracts robotics-specific data representations.
-    Gemini 1.5 Pro is explicitly passed image URI references for architecture diagrams.
+    DeepSeek V3 is prompted with structured Markdown content for architecture analysis.
 
     Input State:
         - state (Dict[str, Any]): Graph state containing downloaded paper paths and 'filtered_results'.
@@ -30,16 +33,19 @@ def analyst_node(state: Dict[str, Any]) -> Dict[str, Any]:
         - Dict[str, Any]: State subset with 'analysis_outputs' representing structural extractions.
     """
     logger.info("Analyst Node: Starting multimodal deep dive on approved papers.")
+
     app_config = get_config()
-    gemini_key = os.environ.get("GEMINI_API_KEY")
-    ai_client = genai.Client(api_key=gemini_key)
+    api_key = os.environ.get("OPENROUTER_API_KEY")
+    if not api_key:
+        raise ValueError("OPENROUTER_API_KEY must be set in environment variables.")
+
+    ai_client = OpenAI(api_key=api_key, base_url=app_config.openrouter_base_url)
 
     parser = PDFParserTool()
     interpreter = CodeInterpreterTool()
 
     approved_ids = state.get("approved_papers", [])
     papers_to_evaluate = state.get("filtered_results", [])
-    # Fallback to scout_results if filtering was skipped
     if not papers_to_evaluate:
         papers_to_evaluate = state.get("scout_results", [])
 
@@ -77,7 +83,6 @@ def analyst_node(state: Dict[str, Any]) -> Dict[str, Any]:
             continue
 
         # 3. Code Implementation Preview
-        # Use simple heuristic to find a github link in comment or summary
         comment = paper.get("comment", "")
         summary = paper.get("summary", "")
         github_match = re.search(
@@ -89,34 +94,38 @@ def analyst_node(state: Dict[str, Any]) -> Dict[str, Any]:
             repo_url = github_match.group(1)
             logger.info(f"Found repository: {repo_url}")
             repo_data = interpreter.analyze_repository(repo_url)
-            code_context = f"GitHub Repo: {repo_url}\nREADME Preview:\n{repo_data.get('readme', '')[:1500]}\n\nRequirements Preview:\n{repo_data.get('requirements', '')[:1000]}"
+            code_context = (
+                f"GitHub Repo: {repo_url}\n"
+                f"README Preview:\n{repo_data.get('readme', '')[:1500]}\n\n"
+                f"Requirements Preview:\n{repo_data.get('requirements', '')[:1000]}"
+            )
 
         # 4. Generate the 1-page summary
-        prompt = f"""
-        You are an elite Robotics Research Analyst.
-        Please provide a deep, 1-page Markdown summary of the following research paper, focusing heavily on:
-        1. The Core Research and Outcomes
-        2. Technical Implementation Details (Neural net architectures, loss functions, action spaces)
-        3. Real-world testing, hardware setups, and sim-to-real gaps.
-        4. Implementation preview (steps to get it running based on provided repo context).
-        
-        Skip all marketing fluff. Use bullet points and bolding for readability.
-        
-        Paper Title: {title}
-        
-        --- FULL PAPER MARKDOWN ---
-        {clean_md[:50000]} # Limiting context window slightly for safety
-        
-        --- GITHUB CONTEXT ---
-        {code_context}
-        """
+        prompt = (
+            "You are an elite Robotics Research Analyst.\n"
+            "Please provide a deep, 1-page Markdown summary of the following research paper, "
+            "focusing heavily on:\n"
+            "1. The Core Research and Outcomes\n"
+            "2. Technical Implementation Details (Neural net architectures, loss functions, action spaces)\n"
+            "3. Real-world testing, hardware setups, and sim-to-real gaps.\n"
+            "4. Implementation preview (steps to get it running based on provided repo context).\n\n"
+            "Skip all marketing fluff. Use bullet points and bolding for readability.\n\n"
+            f"Paper Title: {title}\n\n"
+            "--- FULL PAPER MARKDOWN ---\n"
+            f"{clean_md[:50000]}\n\n"  # Limiting context window slightly for safety
+            "--- GITHUB CONTEXT ---\n"
+            f"{code_context}"
+        )
 
         try:
-            response = ai_client.models.generate_content(
+            response = ai_client.chat.completions.create(
                 model=app_config.llm_model,
-                contents=prompt,
+                messages=[{"role": "user", "content": prompt}],
             )
-            analysis_outputs[arxiv_id] = {"title": title, "summary": response.text}
+            analysis_outputs[arxiv_id] = {
+                "title": title,
+                "summary": response.choices[0].message.content,
+            }
             logger.info(f"Successfully analyzed {arxiv_id}")
         except Exception as e:
             logger.error(f"LLM Analyst generation failed for {arxiv_id}: {e}")

@@ -3,7 +3,7 @@
 project_context:
   name: VLA-RA
   domain: Robotics Research & Multi-Agent Systems
-  stack: [LangGraph, Gemini 1.5 Pro, Supabase, Docling, uv]
+  stack: [LangGraph, DeepSeek V3 (via OpenRouter), SQLite, Docling, uv]
 
 # 1. ARCHITECTURAL MANDATES (SOLID)
 # -----------------------------------------------------------------------------
@@ -24,7 +24,7 @@ error_handling:
       - "Fetching favicons or non-essential external assets."
   - forbidden_try_catch:
       - "PDF Parsing (Docling): If parsing fails, the paper must be marked 'FAILED' in State, not caught and skipped."
-      - "Database Transactions: Any Supabase failure must halt the current branch immediately."
+      - "Database Transactions: Any SQLite failure must halt the current branch immediately."
       - "LLM Scoring: Do not provide a 'default score' if the LLM fails. Halt and log the error."
   - specific_exception: "Define custom exceptions in core/exceptions.py (e.g., PaperAlreadyProcessedError, InsufficientDataForScore)."
 
@@ -52,7 +52,7 @@ ai_interaction_rules:
 # -----------------------------------------------------------------------------
 domain_rules:
   - scoring: "Weighted Rubric calculations must be deterministic. LLMs generate the raw inputs; core/scoring_logic.py performs the math."
-  - multimodal: "When coding Analyst.py, ensure Gemini 1.5 Pro is explicitly passed image URI references for architecture diagrams."
+  - multimodal: "When coding Analyst.py, ensure the LLM is explicitly passed structured Markdown content for architecture diagrams."
 
 # 6. LOGGING & OBSERVABILITY
 # -----------------------------------------------------------------------------
@@ -63,10 +63,11 @@ logging_rules:
       - INFO: "Use for tracking major Agent Node completions (e.g., 'Analyst Node finished processing paper X'), successful database inserts, and workflow milestones."
       - WARNING: "Use for non-fatal issues like rate limits approaching, missing optional metadata, or skipped non-essential steps."
       - ERROR: "Use for caught exceptions that halt a specific branch but don't crash the entire system (e.g., a single paper parsing failure)."
-      - CRITICAL: "Use for unrecoverable errors that must halt the entire workflow (e.g., Supabase connection failure, out of memory, complete API outage)."
+      - CRITICAL: "Use for unrecoverable errors that must halt the entire workflow (e.g., database connection failure, out of memory, complete API outage)."
   - formatting: "Logs should be structured (preferably JSON in production) and include contextual metadata like `agent_name`, `paper_id`, and `trace_id`."
 
 # 7. STATE AND PERSISTENCE RULES
 # -----------------------------------------------------------------------------
 state_persistence_rules:
-  - stateless_agents: "Agent Nodes must be stateless. Any persistence to Supabase must include a 'status' flag to allow for crash recovery in subsequent runs."
+  - stateless_agents: "Agent Nodes must be stateless. Any persistence to the local SQLite database must include a 'status' flag to allow for crash recovery in subsequent runs."
+  - database: "The local SQLite database lives at data/vla_ra.db. Use core/database.py (DatabaseClient) for all reads and writes. Never query SQLite directly from agent nodes."
