@@ -30,6 +30,7 @@ Research from these institutions should receive elevated scoring:
 - ETH Zurich
 - Tsinghua University
 - KAIST
+- NVIDIA
 
 ## Target Conferences
 Papers accepted or submitted to these venues should receive elevated scoring:
