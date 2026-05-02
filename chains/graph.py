@@ -42,3 +42,28 @@ def create_workflow():
     # Compile the graph into a runnable sequence with an interrupt
     memory = MemorySaver()
     return workflow.compile(checkpointer=memory, interrupt_before=["analyst"])
+
+
+def create_express_workflow():
+    """
+    Builds a stripped-down workflow for express mode (--arxiv-id flag).
+    Skips Scout and Librarian entirely. Papers are pre-loaded into state by main.py.
+
+    Graph: START → critic → analyst → END
+    Interrupts before analyst (same HITL gate as the full workflow).
+
+    Returns:
+        Compiled StateGraph: The express workflow.
+    """
+    workflow = StateGraph(GraphState)
+
+    workflow.add_node("critic", critic_node)
+    workflow.add_node("analyst", analyst_node)
+
+    workflow.add_edge(START, "critic")
+    workflow.add_edge("critic", "analyst")
+    workflow.add_edge("analyst", END)
+
+    memory = MemorySaver()
+    return workflow.compile(checkpointer=memory, interrupt_before=["analyst"])
+

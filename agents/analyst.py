@@ -6,12 +6,17 @@ and Docling to parse and analyse PDFs and extract architecture details.
 
 Research domain and analytical focus are driven entirely by the manifesto in
 GraphState — no domain-specific terms are hardcoded here.
+
+Outputs:
+    - outputs/{arxiv_id}.md  — 1-page Markdown summary written to disk.
+    - data/vla_ra.db         — analysis_summary persisted to metadata column.
 """
 
 import os
 import re
 import logging
 import requests
+from pathlib import Path
 from typing import Any, Dict
 
 from openai import OpenAI
@@ -20,6 +25,8 @@ from core.config import get_config
 from core.database import DatabaseClient
 from tools.parser import PDFParserTool
 from tools.code_interpreter import CodeInterpreterTool
+
+OUTPUTS_DIR = Path("outputs")
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +156,23 @@ def analyst_node(state: Dict[str, Any]) -> Dict[str, Any]:
             logger.error(f"LLM Analyst generation failed for {arxiv_id}: {e}")
             analysis_outputs[arxiv_id] = {"error": "LLM generation failed"}
             continue  # Do not persist a failed analysis to DB
+
+        # 5. Write summary to disk as a Markdown file
+        try:
+            OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+            safe_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_')[:60]
+            output_path = OUTPUTS_DIR / f"{arxiv_id}_{safe_title}.md"
+            md_content = (
+                f"# {title}\n"
+                f"**ArXiv ID:** {arxiv_id}  \n"
+                f"**URL:** {paper.get('url', '')}  \n\n"
+                f"---\n\n"
+                f"{generated_summary}"
+            )
+            output_path.write_text(md_content, encoding="utf-8")
+            logger.info(f"Summary written to: {output_path}")
+        except Exception as write_err:
+            logger.warning(f"Could not write summary file for {arxiv_id}: {write_err}")
 
         # 5. Persist analysis summary to DB and update status to "analysed"
         try:
