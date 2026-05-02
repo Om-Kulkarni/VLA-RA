@@ -37,9 +37,18 @@ def main():
     except FileNotFoundError:
         logger.warning("core/manifesto.md not found. Proceeding with empty manifesto.")
 
-    # Define a test initial state
+    # Define the initial workflow state.
+    # -------------------------------------------------------------------------
+    # SINGLE POINT OF EDIT: To change what this system researches, edit
+    # core/manifesto.md ONLY. The manifesto is injected here and drives all
+    # downstream agent behaviour (Scout queries, Librarian relevance checks,
+    # Critic scoring prompts, and Analyst summaries).
+    #
+    # 'search_query' is an optional one-off narrowing hint (leave empty to let
+    # the manifesto fully determine research direction).
+    # -------------------------------------------------------------------------
     initial_state = {
-        "search_query": "Recent advancements in Vision-Language-Action (VLA) models for bimanual manipulation",
+        "search_query": "",  # Leave empty — manifesto is the sole research directive.
         "manifesto": manifesto_content,
         "scout_results": [],
         "filtered_results": [],
@@ -48,7 +57,7 @@ def main():
         "errors": [],
     }
 
-    print(f"Triggering workflow with query: '{initial_state['search_query']}'\n")
+    print(f"Triggering workflow. Research direction is defined in core/manifesto.md\n")
 
     # Execute the graph and pass LangSmith metadata for tracing
     config = {

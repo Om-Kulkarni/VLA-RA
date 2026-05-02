@@ -32,26 +32,40 @@ def _make_llm_client(config: Any) -> OpenAI:
 def scout_node(state: Dict[str, Any], config: RunnableConfig) -> Dict[str, Any]:
     """
     Executes the Scout logic to query external sources.
+    Derives all search intent from the research manifesto. If an optional
+    'search_query' override is present in state it is used to focus the queries
+    further, but the manifesto is the single source of research direction.
 
     Input State:
-        - state (Dict[str, Any]): The current graph state containing search intents or keywords.
+        - state (Dict[str, Any]): The current graph state. 'manifesto' is required;
+          'search_query' is an optional narrowing hint.
 
     Output State:
         - Dict[str, Any]: State subset with updated 'scout_results' containing discovered URLs or paper metadata.
     """
-    search_query = state.get("search_query", "")
     manifesto = state.get("manifesto", "")
-    if not search_query:
-        return {"scout_results": []}
+    if not manifesto:
+        logger.error("Manifesto is empty — cannot generate search queries without research direction.")
+        raise ValueError("Manifesto must be present in state. Edit core/manifesto.md to define research goals.")
+
+    # search_query is an optional narrowing hint; the manifesto is the authoritative source.
+    search_query = state.get("search_query", "").strip()
+    focus_line = (
+        f"Additionally narrow the queries toward this specific focus: {search_query}\n"
+        if search_query
+        else ""
+    )
 
     app_config = get_config()
     client = _make_llm_client(app_config)
 
     prompt = (
-        f"You are a Lead Robotics Researcher. Expand the following topic into 5 highly "
-        f"specific search queries for ArXiv: {search_query}.\n"
-        f"Align these queries with this core Manifesto:\n{manifesto}\n\n"
-        f'Return a JSON object with a single key "queries" containing a list of 5 string queries.'
+        "You are an expert research strategist. "
+        "Based solely on the Research Manifesto below, generate 5 highly specific ArXiv search queries "
+        "that will surface the most relevant cutting-edge papers for the defined research goals.\n\n"
+        f"Research Manifesto:\n{manifesto}\n\n"
+        f"{focus_line}"
+        'Return a JSON object with a single key "queries" containing a list of 5 string queries.'
     )
 
     try:

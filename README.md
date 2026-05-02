@@ -4,7 +4,7 @@ This project is a LangGraph-based framework for retrieving, parsing, and evaluat
 
 ## Overview: The Agentic Workflow
 
-At the core of the VLA-RA is an autonomous, goal-oriented agentic workflow powered by **DeepSeek V3** via **OpenRouter**. The system involves multiple dedicated, specialized agents (nodes) collaborating in a cyclic or sequential graph to transform a user's initial high-level intent into highly actionable insights. The workflow typically progresses from broad discovery to deep qualitative analysis.
+At the core of the VLA-RA is an autonomous, goal-oriented agentic workflow powered by **DeepSeek V3** via **OpenRouter**. The system involves multiple dedicated, specialized agents (nodes) collaborating in a cyclic or sequential graph to transform research goals — defined entirely in `core/manifesto.md` — into highly actionable insights. The workflow progresses from broad discovery to deep qualitative analysis.
 
 ![Agentic Workflow Strategy](images/agentic_workflow.png)
 
@@ -43,6 +43,22 @@ The codebase adheres strictly to SOLID principles, carefully separating agent in
 - `tools/arxiv_api.py`: Robust wrappers for querying and interacting directly with external ArXiv publication logic.
 - `tools/code_interpreter.py`: Advanced interpreter configuration to process code execution alongside theoretical insights from repositories.
 - `tools/parser.py`: Implements advanced PDF parsing mechanics (e.g., Docling API bridging) to yield high-fidelity visual/textual data for multimodal models.
+
+## Manifesto: Single Point of Edit
+
+**`core/manifesto.md` is the only file you need to edit to change what the system researches.**
+
+All agents read their research direction exclusively from the manifesto injected into `GraphState`. No domain-specific terms are hardcoded anywhere in the source code. To pivot the workflow to an entirely different field (e.g., from robotics to drug discovery), simply rewrite `core/manifesto.md` and run again — zero code changes required.
+
+| What controls research direction | Where to edit |
+|---|---|
+| Overarching research goal | `core/manifesto.md` |
+| Core interest areas | `core/manifesto.md` |
+| Evaluation / relevance criteria | `core/manifesto.md` |
+| **Priority labs for heuristic scoring** | **`core/manifesto.md` → `## Priority Labs`** |
+| **Target conferences for heuristic scoring** | **`core/manifesto.md` → `## Target Conferences`** |
+| One-off session narrowing hint | `search_query` in `main.py` (optional, leave empty) |
+| Scoring weights | `core/scoring_logic.py` |
 
 ## "Must-Read" Rubric Documentation
 *To be defined: A weighted scoring logic applied by the `critic` node.*

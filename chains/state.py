@@ -12,8 +12,11 @@ class GraphState(TypedDict):
     Represents the complete state of the workflow graph passed between agent nodes.
 
     Attributes:
-        search_query (str): The initial user query or search intent.
-        manifesto (str): The central research manifesto dictating core interests.
+        search_query (str): Optional one-off narrowing hint for the Scout. Leave empty
+            to let the manifesto fully determine research direction. Do NOT hardcode
+            domain-specific topics here \u2014 edit core/manifesto.md instead.
+        manifesto (str): The central research manifesto (core/manifesto.md). This is the
+            SINGLE SOURCE OF TRUTH for all research direction across the entire workflow.
         scout_results (List[Dict[str, Any]]): Raw results returned by the Scout node.
         filtered_results (List[Dict[str, Any]]): Deduplicated results after Librarian processing.
         analysis_outputs (Dict[str, Any]): Multimodal analysis extractions from the Analyst node.

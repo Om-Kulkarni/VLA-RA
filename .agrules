@@ -71,3 +71,15 @@ logging_rules:
 state_persistence_rules:
   - stateless_agents: "Agent Nodes must be stateless. Any persistence to the local SQLite database must include a 'status' flag to allow for crash recovery in subsequent runs."
   - database: "The local SQLite database lives at data/vla_ra.db. Use core/database.py (DatabaseClient) for all reads and writes. Never query SQLite directly from agent nodes."
+
+# 8. MANIFESTO: SINGLE POINT OF EDIT
+# -----------------------------------------------------------------------------
+manifesto_rules:
+  - single_source_of_truth: "core/manifesto.md is the ONLY place that defines research direction. Every agent prompt that references domain goals must read from the 'manifesto' GraphState key. Never hardcode research topics (e.g. 'VLA', 'robotics', 'bimanual') inside agent or tool source files."
+  - no_hardcoded_topics: "Domain-specific terms must NOT appear in agent prompts as static strings. The LLM role descriptions in agents must be domain-agnostic (e.g. 'You are an expert research evaluator' not 'You are a Lead Robotics Researcher')."
+  - search_query_is_optional: "The 'search_query' GraphState field is an optional one-off narrowing hint only. It must default to empty string in main.py. Research direction comes from the manifesto, not search_query."
+  - changing_research_domain: "To point the entire workflow at a new research field, the user only needs to edit core/manifesto.md. Zero changes to source code should be required."
+  - labs_and_conferences_in_manifesto: "Priority Labs and Target Conferences used by the Critic for heuristic scoring must be defined in manifesto.md under '## Priority Labs' and '## Target Conferences' sections. They must be parsed at runtime via core/manifesto_parser.py. Hardcoding institution or conference names in any .py file is forbidden."
+  - manifesto_parser: "core/manifesto_parser.py is the only permitted way to extract structured lists from the manifesto. Never parse manifesto markdown inline inside agent code."
+
+
