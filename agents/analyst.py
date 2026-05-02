@@ -1,13 +1,15 @@
 """
 Analyst Node
 
-This module serves as the multimodal reader, utilising DeepSeek V3 via OpenRouter
+This module serves as the deep-dive reader, utilising DeepSeek V3 via OpenRouter
 and Docling to parse and analyse PDFs and extract architecture details.
+
+Research domain and analytical focus are driven entirely by the manifesto in
+GraphState — no domain-specific terms are hardcoded here.
 """
 
 import os
 import re
-import json
 import logging
 import requests
 from typing import Any, Dict
@@ -15,6 +17,7 @@ from typing import Any, Dict
 from openai import OpenAI
 
 from core.config import get_config
+from core.database import DatabaseClient
 from tools.parser import PDFParserTool
 from tools.code_interpreter import CodeInterpreterTool
 
@@ -23,16 +26,23 @@ logger = logging.getLogger(__name__)
 
 def analyst_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Parses full paper texts/images and extracts robotics-specific data representations.
-    DeepSeek V3 is prompted with structured Markdown content for architecture analysis.
+    Parses full paper texts and generates a deep 1-page summary for each approved paper.
+    Persists the analysis summary to the local database and updates status to 'analysed'.
+
+    The analytical focus (what to look for, what matters) is derived from the
+    research manifesto — not from hardcoded domain terms.
 
     Input State:
-        - state (Dict[str, Any]): Graph state containing downloaded paper paths and 'filtered_results'.
+        - state (Dict[str, Any]): Graph state containing:
+            - 'approved_papers': list of arxiv_ids approved at the HITL interrupt.
+            - 'filtered_results': full paper metadata from the Librarian.
+            - 'manifesto': the central research manifesto.
 
     Output State:
-        - Dict[str, Any]: State subset with 'analysis_outputs' representing structural extractions.
+        - Dict[str, Any]: State subset with 'analysis_outputs' — a dict of
+          {arxiv_id: {"title": str, "summary": str}} for successfully analysed papers.
     """
-    logger.info("Analyst Node: Starting multimodal deep dive on approved papers.")
+    logger.info("Analyst Node: Starting deep-dive on approved papers.")
 
     app_config = get_config()
     api_key = os.environ.get("OPENROUTER_API_KEY")
@@ -40,10 +50,12 @@ def analyst_node(state: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("OPENROUTER_API_KEY must be set in environment variables.")
 
     ai_client = OpenAI(api_key=api_key, base_url=app_config.openrouter_base_url)
+    db_client = DatabaseClient(db_path=app_config.db_path)
 
     parser = PDFParserTool()
     interpreter = CodeInterpreterTool()
 
+    manifesto = state.get("manifesto", "")
     approved_ids = state.get("approved_papers", [])
     papers_to_evaluate = state.get("filtered_results", [])
     if not papers_to_evaluate:
@@ -69,12 +81,16 @@ def analyst_node(state: Dict[str, Any]) -> Dict[str, Any]:
                 if res.status_code == 200:
                     with open(pdf_path, "wb") as f:
                         f.write(res.content)
+                else:
+                    logger.error(f"PDF download for {arxiv_id} returned HTTP {res.status_code}.")
+                    analysis_outputs[arxiv_id] = {"error": f"PDF download failed (HTTP {res.status_code})"}
+                    continue
             except Exception as e:
                 logger.error(f"Failed to download PDF for {arxiv_id}: {e}")
                 analysis_outputs[arxiv_id] = {"error": "PDF download failed"}
                 continue
 
-        # 2. Parse PDF to Clean Markdown with Docling
+        # 2. Parse PDF to clean Markdown with Docling
         try:
             clean_md = parser.parse_pdf(pdf_path)
         except Exception as e:
@@ -82,17 +98,17 @@ def analyst_node(state: Dict[str, Any]) -> Dict[str, Any]:
             analysis_outputs[arxiv_id] = {"error": "Docling parse failed"}
             continue
 
-        # 3. Code Implementation Preview
+        # 3. Code/repository context
         comment = paper.get("comment", "")
         summary = paper.get("summary", "")
         github_match = re.search(
             r"(https://github\.com/[^\s]+)", comment + " " + summary
         )
 
-        code_context = "No Github link found for code preview."
+        code_context = "No GitHub link found for code preview."
         if github_match:
             repo_url = github_match.group(1)
-            logger.info(f"Found repository: {repo_url}")
+            logger.info(f"Found repository for {arxiv_id}: {repo_url}")
             repo_data = interpreter.analyze_repository(repo_url)
             code_context = (
                 f"GitHub Repo: {repo_url}\n"
@@ -100,20 +116,23 @@ def analyst_node(state: Dict[str, Any]) -> Dict[str, Any]:
                 f"Requirements Preview:\n{repo_data.get('requirements', '')[:1000]}"
             )
 
-        # 4. Generate the 1-page summary
+        # 4. Generate 1-page summary — focus derived from manifesto, not hardcoded domain
         prompt = (
-            "You are an elite Robotics Research Analyst.\n"
-            "Please provide a deep, 1-page Markdown summary of the following research paper, "
-            "focusing heavily on:\n"
-            "1. The Core Research and Outcomes\n"
-            "2. Technical Implementation Details (Neural net architectures, loss functions, action spaces)\n"
-            "3. Real-world testing, hardware setups, and sim-to-real gaps.\n"
-            "4. Implementation preview (steps to get it running based on provided repo context).\n\n"
-            "Skip all marketing fluff. Use bullet points and bolding for readability.\n\n"
+            "You are an expert research analyst.\n"
+            "Based on the Research Manifesto below, produce a precise 1-page Markdown summary "
+            "of the paper. Focus on what matters most to the research goals defined in the manifesto.\n\n"
+            f"Research Manifesto:\n{manifesto}\n\n"
+            "Structure your summary to cover:\n"
+            "1. **Core Contribution** — What problem does it solve? What is the key claim?\n"
+            "2. **Technical Details** — Architecture, training setup, loss functions, key design choices.\n"
+            "3. **Experimental Results** — Benchmarks, baselines beaten, real-world tests, hardware.\n"
+            "4. **Relevance to Our Research** — Specific connections to the manifesto's core interests.\n"
+            "5. **Implementation Readiness** — Can we run this? What does the repo provide?\n\n"
+            "Be precise. No marketing language. Use bullet points and **bold** for scannability.\n\n"
             f"Paper Title: {title}\n\n"
             "--- FULL PAPER MARKDOWN ---\n"
-            f"{clean_md[:50000]}\n\n"  # Limiting context window slightly for safety
-            "--- GITHUB CONTEXT ---\n"
+            f"{clean_md[:50000]}\n\n"  # Context window guard
+            "--- GITHUB / CODE CONTEXT ---\n"
             f"{code_context}"
         )
 
@@ -122,13 +141,26 @@ def analyst_node(state: Dict[str, Any]) -> Dict[str, Any]:
                 model=app_config.llm_model,
                 messages=[{"role": "user", "content": prompt}],
             )
-            analysis_outputs[arxiv_id] = {
-                "title": title,
-                "summary": response.choices[0].message.content,
-            }
-            logger.info(f"Successfully analyzed {arxiv_id}")
+            generated_summary = response.choices[0].message.content
+            analysis_outputs[arxiv_id] = {"title": title, "summary": generated_summary}
+            logger.info(f"Successfully generated summary for {arxiv_id}.")
+
         except Exception as e:
             logger.error(f"LLM Analyst generation failed for {arxiv_id}: {e}")
-            analysis_outputs[arxiv_id] = {"error": "LLM Generation failed"}
+            analysis_outputs[arxiv_id] = {"error": "LLM generation failed"}
+            continue  # Do not persist a failed analysis to DB
+
+        # 5. Persist analysis summary to DB and update status to "analysed"
+        try:
+            db_client.update_paper_score(
+                external_id=arxiv_id,
+                score=None,           # Score already written by Critic — preserve it
+                metadata={"analysis_summary": generated_summary},
+            )
+            db_client.update_status(arxiv_id, "analysed")
+            logger.info(f"Analysis for {arxiv_id} persisted to DB. Status → 'analysed'.")
+        except Exception as db_err:
+            logger.error(f"Failed to persist analysis for {arxiv_id} to DB: {db_err}")
+            raise  # Fail loudly per .agrules
 
     return {"analysis_outputs": analysis_outputs}

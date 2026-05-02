@@ -148,6 +148,20 @@ def main():
     for arxiv_id, score in rubric_scores.items():
         print(f"  ArXiv ID {arxiv_id}: Priority Score = {score}/5.0")
 
+    print("\n\nAnalyst Deep-Dive Summaries:")
+    analysis_outputs = final_state.get("analysis_outputs", {})
+    if not analysis_outputs:
+        print("No papers were approved for deep-dive analysis.")
+    for arxiv_id, output in analysis_outputs.items():
+        if "error" in output:
+            print(f"\n  [{arxiv_id}] ERROR: {output['error']}")
+        else:
+            print(f"\n{'=' * 60}")
+            print(f"  {output.get('title', arxiv_id)}")
+            print(f"  ArXiv ID: {arxiv_id}")
+            print(f"{'=' * 60}")
+            print(output.get("summary", ""))
+
 
 if __name__ == "__main__":
     main()

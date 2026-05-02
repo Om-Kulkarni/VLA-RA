@@ -148,38 +148,62 @@ class DatabaseClient:
         )
         self._conn.commit()
 
-    def update_paper_score(self, external_id: str, score: float, metadata: dict):
+    def update_paper_score(self, external_id: str, score: float | None, metadata: dict):
         """
-        Updates the score and metadata of a specific paper. Fails loudly on error.
+        Updates the score and/or metadata of a specific paper. Fails loudly on error.
+
+        When called by the Critic, pass a float score to set priority_score and
+        transition status to 'scored'.
+
+        When called by the Analyst, pass score=None to append metadata (e.g. the
+        analysis summary) without overwriting the Critic's existing priority_score.
+        Status must be updated separately via update_status() in that case.
 
         Args:
             external_id (str): The ArXiv ID.
-            score (float): The final priority score.
-            metadata (dict): The dict of extracted heuristic values.
+            score (float | None): The final priority score, or None to preserve existing value.
+            metadata (dict): The dict of extracted heuristic values or analysis summary.
         """
-        update_fields = {
-            "priority_score": score,
-            "status": "scored",
-            "metadata": json.dumps(metadata),
-            "github_link": metadata.get("github_link"),
-            "project_website": metadata.get("project_website"),
-            "arxiv_id": external_id,
-        }
+        serialised_metadata = json.dumps(metadata)
 
-        self._conn.execute(
-            """
-            UPDATE research_papers
-            SET priority_score  = :priority_score,
-                status          = :status,
-                metadata        = :metadata,
-                github_link     = :github_link,
-                project_website = :project_website
-            WHERE arxiv_id = :arxiv_id
-            """,
-            update_fields,
-        )
+        if score is not None:
+            # Full Critic update — set score, status, and all metadata columns
+            self._conn.execute(
+                """
+                UPDATE research_papers
+                SET priority_score  = :priority_score,
+                    status          = :status,
+                    metadata        = :metadata,
+                    github_link     = :github_link,
+                    project_website = :project_website
+                WHERE arxiv_id = :arxiv_id
+                """,
+                {
+                    "priority_score": score,
+                    "status": "scored",
+                    "metadata": serialised_metadata,
+                    "github_link": metadata.get("github_link"),
+                    "project_website": metadata.get("project_website"),
+                    "arxiv_id": external_id,
+                },
+            )
+        else:
+            # Analyst update — append metadata only, preserve existing priority_score
+            self._conn.execute(
+                """
+                UPDATE research_papers
+                SET metadata = :metadata
+                WHERE arxiv_id = :arxiv_id
+                """,
+                {
+                    "metadata": serialised_metadata,
+                    "arxiv_id": external_id,
+                },
+            )
+
         self._conn.commit()
 
     def close(self):
         """Closes the database connection explicitly."""
         self._conn.close()
+
