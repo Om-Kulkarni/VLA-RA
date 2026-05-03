@@ -89,8 +89,12 @@ def analyst_node(state: Dict[str, Any]) -> Dict[str, Any]:
                     with open(pdf_path, "wb") as f:
                         f.write(res.content)
                 else:
-                    logger.error(f"PDF download for {arxiv_id} returned HTTP {res.status_code}.")
-                    analysis_outputs[arxiv_id] = {"error": f"PDF download failed (HTTP {res.status_code})"}
+                    logger.error(
+                        f"PDF download for {arxiv_id} returned HTTP {res.status_code}."
+                    )
+                    analysis_outputs[arxiv_id] = {
+                        "error": f"PDF download failed (HTTP {res.status_code})"
+                    }
                     continue
             except Exception as e:
                 logger.error(f"Failed to download PDF for {arxiv_id}: {e}")
@@ -123,19 +127,40 @@ def analyst_node(state: Dict[str, Any]) -> Dict[str, Any]:
                 f"Requirements Preview:\n{repo_data.get('requirements', '')[:1000]}"
             )
 
-        # 4. Generate 1-page summary — focus derived from manifesto, not hardcoded domain
+        # 4. Generate Deep Research Brief — focus derived from manifesto, not hardcoded domain
+        # Block 4 injects the manifesto's Core Interests so the alignment question is
+        # always specific to the active research domain, not a hardcoded topic.
+        from core.manifesto_parser import parse_section_list
+
+        core_interests = parse_section_list(manifesto, "Core Interests")
+        interests_str = (
+            "\n".join(f"- {i}" for i in core_interests) if core_interests else manifesto
+        )
+
         prompt = (
-            "You are an expert research analyst.\n"
-            "Based on the Research Manifesto below, produce a precise 1-page Markdown summary "
-            "of the paper. Focus on what matters most to the research goals defined in the manifesto.\n\n"
+            "You are a Senior Research Lead and Technical Content Creator.\n"
+            "Based on the Research Manifesto, produce a 'Deep Research Brief' that is ready for social distribution.\n\n"
             f"Research Manifesto:\n{manifesto}\n\n"
-            "Structure your summary to cover:\n"
-            "1. **Core Contribution** — What problem does it solve? What is the key claim?\n"
-            "2. **Technical Details** — Architecture, training setup, loss functions, key design choices.\n"
-            "3. **Experimental Results** — Benchmarks, baselines beaten, real-world tests, hardware.\n"
-            "4. **Relevance to Our Research** — Specific connections to the manifesto's core interests.\n"
-            "5. **Implementation Readiness** — Can we run this? What does the repo provide?\n\n"
-            "Be precise. No marketing language. Use bullet points and **bold** for scannability.\n\n"
+            "Structure your output into four distinct blocks exactly as shown below:\n\n"
+            "--- BLOCK 1: THE SOCIAL HOOKS (For X) ---\n"
+            "1. **The 'Contrarian' Hook:** A 1-sentence statement that challenges common wisdom based on this paper.\n"
+            "2. **The 'Outcome' Hook:** A 1-sentence statement about the most impressive real-world task the paper achieved.\n"
+            "3. **The 'Vibe' Hook:** A witty, one-liner (Kache-style) about a technical pain point mentioned "
+            "(e.g., 'Another day, another 50,000 GPU hours for a 5% pick-rate boost').\n\n"
+            "--- BLOCK 2: THE TECHNICAL MEAT (For Substack/Threads) ---\n"
+            "1. **The Architecture Breakthrough:** Explain the VLA/World Model innovation like I'm a fellow PhD "
+            "(mention specific loss functions or tokenization methods).\n"
+            "2. **The 'PhD Reality Check':** What did they gloss over? "
+            "(e.g., 'Zero-shot' but on a fixed background? Latency? Dataset diversity?)\n"
+            "3. **Hardware/Code:** Is the URDF/Policy code actually usable? "
+            "What does the repo actually provide vs. what's missing?\n\n"
+            "--- BLOCK 3: VISUAL ASSETS ---\n"
+            "1. **The 'Main Image' Suggestion:** Describe exactly which Figure from the paper I should screenshot for the cover.\n"
+            "2. **The 'Demo' Suggestion:** Which 10-second clip from the project site should I screen-record?\n\n"
+            "--- BLOCK 4: MANIFESTO ALIGNMENT ---\n"
+            "For each of our active Core Interests below, write 1-2 sentences on exactly how this paper advances, "
+            "challenges, or is irrelevant to that specific interest. Be blunt — say 'Not relevant' if it isn't.\n\n"
+            f"Our Core Interests:\n{interests_str}\n\n"
             f"Paper Title: {title}\n\n"
             "--- FULL PAPER MARKDOWN ---\n"
             f"{clean_md[:50000]}\n\n"  # Context window guard
@@ -160,7 +185,7 @@ def analyst_node(state: Dict[str, Any]) -> Dict[str, Any]:
         # 5. Write summary to disk as a Markdown file
         try:
             OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-            safe_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_')[:60]
+            safe_title = re.sub(r"[^\w\s-]", "", title).strip().replace(" ", "_")[:60]
             output_path = OUTPUTS_DIR / f"{arxiv_id}_{safe_title}.md"
             md_content = (
                 f"# {title}\n"
@@ -178,11 +203,13 @@ def analyst_node(state: Dict[str, Any]) -> Dict[str, Any]:
         try:
             db_client.update_paper_score(
                 external_id=arxiv_id,
-                score=None,           # Score already written by Critic — preserve it
+                score=None,  # Score already written by Critic — preserve it
                 metadata={"analysis_summary": generated_summary},
             )
             db_client.update_status(arxiv_id, "analysed")
-            logger.info(f"Analysis for {arxiv_id} persisted to DB. Status → 'analysed'.")
+            logger.info(
+                f"Analysis for {arxiv_id} persisted to DB. Status → 'analysed'."
+            )
         except Exception as db_err:
             logger.error(f"Failed to persist analysis for {arxiv_id} to DB: {db_err}")
             raise  # Fail loudly per .agrules
