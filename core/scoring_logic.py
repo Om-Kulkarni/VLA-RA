@@ -7,19 +7,22 @@ for evaluating papers and repositories. It operates on LLM-generated raw inputs.
 According to O (Open/Closed principle), new scoring criteria should be added here
 without modifying the Agent graph logic.
 
-Rubric (max raw score = 6.0, normalised to 5.0):
-  1. Citations                          — max 1.0
-  2. Lab Impact & Target Conferences    — max 1.0
-  3. Composite Relevance (3 sub-dims)   — max 1.5
-  4. Novelty                            — max 1.0
-  5. Code Maturity (0/1/2)             — max 1.0
-  6. Project Website                    — max 0.5
+Rubric (max raw score = 5.0):
+  1. Lab Impact & Target Conferences    — max 1.0
+  2. Composite Relevance (3 sub-dims)   — max 1.5
+  3. Novelty                            — max 1.0
+  4. Code Maturity (0/1/2)             — max 1.0
+  5. Project Website                    — max 0.5
   is_continuation                       — metadata only, NOT scored
+
+Note: Citations are intentionally excluded. New and niche papers with zero
+citations were being unfairly penalised. Relevance and novelty are stronger
+signals for forward-looking research discovery.
 """
 
 from typing import Dict, Any
 
-_MAX_RAW_SCORE = 6.0
+_MAX_RAW_SCORE = 5.0
 
 
 def calculate_rubric_score(criteria_inputs: Dict[str, Any]) -> float:
@@ -30,8 +33,6 @@ def calculate_rubric_score(criteria_inputs: Dict[str, Any]) -> float:
         criteria_inputs (Dict[str, Any]): A dictionary of raw scores or categorical
             values provided by the Critic node. Expected keys:
 
-            citations (int):
-                Citation count from Semantic Scholar.
             has_elite_lab (bool):
                 True if any author affiliation matches a Priority Lab from the manifesto.
             has_core_conference (bool):
@@ -56,17 +57,7 @@ def calculate_rubric_score(criteria_inputs: Dict[str, Any]) -> float:
     """
     score = 0.0
 
-    # 1. Citations (Max 1.0)
-    # Thresholds tuned for post-2023 papers which rarely exceed 20 citations quickly.
-    citations = int(criteria_inputs.get("citations", 0))
-    if citations >= 20:
-        score += 1.0
-    elif citations >= 5:
-        score += 0.5
-    elif citations > 0:
-        score += 0.2
-
-    # 2. Lab Impact & Target Conferences (Max 1.0)
+    # 1. Lab Impact & Target Conferences (Max 1.0)
     # Labs and conferences are parsed from manifesto at Critic runtime — never hardcoded.
     lab_conf_score = 0.0
     if criteria_inputs.get("has_elite_lab", False):
